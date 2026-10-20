@@ -1,16 +1,13 @@
-# React + Vite
+# React mail merge and sender
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+The React project reads CSV and Excel files, merges fields in the browser, previews each personalized message, and sends email through a JavaScript mail service loaded by Vite. It does not use the `python` folder.
 
-Currently, two official plugins are available:
+## Configure Gmail
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Enter your Gmail address and Google app password in the **Email configuration** panel in the app. The values stay in page memory and are submitted to the local Vite mail service only when you send. A Google app password is required; your regular Gmail password will not work.
 
-## React Compiler
+You can also set `GMAIL_USER` and `GMAIL_APP_PASSWORD` in `.env.local` as defaults. Keep `.env.local` private and restart Vite after changing it. Values entered in the UI take precedence.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+The Vite Node service uses Nodemailer to deliver through Gmail SMTP. For production hosting, run the app in a Node environment that supports the Vite mail middleware, or move the same mail handler into your host's server function.
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+You can still export personalized `.eml` drafts in a ZIP instead of sending directly.
