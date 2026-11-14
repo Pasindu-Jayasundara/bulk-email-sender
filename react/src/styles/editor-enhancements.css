@@ -1,0 +1,8 @@
+﻿.email-sender .designer-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.email-sender .email-editor{max-height:420px;font:13px/1.7 Arial,sans-serif}
+.email-sender .mail-window iframe{height:420px}
+.email-sender .color-tool{position:relative;width:29px;height:26px;display:inline-flex;align-items:center;justify-content:center;border:1px solid #f3dfe2;border-radius:4px;background:#fff;color:#a94450;font:700 12px 'DM Sans',sans-serif;cursor:pointer}
+.email-sender .color-tool:hover{border-color:#cc7c87;background:#fbf0f1}
+.email-sender .color-tool input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
+.email-sender .highlight-tool{color:#5c6559;font-size:15px;text-shadow:0 2px #fff29a}
+@media(max-width:850px){.email-sender .designer-grid{grid-template-columns:1fr}.email-sender .email-editor{max-height:320px}.email-sender .mail-window iframe{height:320px}}

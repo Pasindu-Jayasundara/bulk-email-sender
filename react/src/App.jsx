@@ -1,12 +1,21 @@
-import { useRef, useState } from 'react'
+﻿import { useRef, useState } from 'react'
 import EmailDesigner from './components/EmailDesigner.jsx'
 import FileImport from './components/FileImport.jsx'
 import RecipientTable from './components/RecipientTable.jsx'
 import SendPanel from './components/SendPanel.jsx'
 import SendingModal from './components/SendingModal.jsx'
-import { buildRecipientData } from './lib/dataFiles.js'
+import { buildRecipientData, readDataFile } from './lib/dataFiles.js'
 import { renderTemplate, DEFAULT_BODY, DEFAULT_SUBJECT } from './lib/template.js'
 import { createZip } from './lib/zip.js'
+import './email.css'
+import './styles/sources.css'
+import './styles/fields.css'
+import './styles/joins.css'
+import './styles/designer.css'
+import './styles/send.css'
+import './styles/progress.css'
+import './styles/editor-enhancements.css'
+import './styles/layout.css'
 
 function toBase64(bytes) {
   let binary = ''
@@ -22,9 +31,10 @@ function base64Lines(text) {
   return base64.match(/.{1,76}/g)?.join('\r\n') || ''
 }
 
-function makeEml(email, subject, bodyHtml) {
+function makeEml(email, subject, bodyHtml, lineSpacing) {
   const subjectHeader = `=?UTF-8?B?${toBase64(new TextEncoder().encode(subject.replace(/[\r\n]+/g, ' ')))}?=`
-  return `To: ${email}\r\nSubject: ${subjectHeader}\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n${base64Lines(bodyHtml)}\r\n`
+  const html = `<div style="font:13px/${lineSpacing} Arial,sans-serif;color:#384137"><style>p{margin:0 0 5px}p:last-child{margin-bottom:0}ul,ol{margin:5px 0;padding-left:24px}</style>${bodyHtml}</div>`
+  return `To: ${email}\r\nSubject: ${subjectHeader}\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n${base64Lines(html)}\r\n`
 }
 
 function safeFilePart(value) {
@@ -41,6 +51,8 @@ function downloadBlob(blob, filename) {
 function App() {
   const primaryInputRef = useRef(null)
   const dataInputRef = useRef(null)
+  const previewRunRef = useRef(0)
+  const manualDataRunRef = useRef(0)
   const [primaryFile, setPrimaryFile] = useState(null)
   const [dataFiles, setDataFiles] = useState([])
   const [fields, setFields] = useState([])
@@ -50,10 +62,13 @@ function App() {
   const [joins, setJoins] = useState({})
   const [recipientField, setRecipientField] = useState('')
   const [recipientAlias, setRecipientAlias] = useState('')
+  const [typedEmails, setTypedEmails] = useState('')
+  const [manualDataInfo, setManualDataInfo] = useState({ fields: [], records: [] })
   const [headerlessPrimary, setHeaderlessPrimary] = useState(false)
   const [firstColumnName, setFirstColumnName] = useState('Email')
   const [subject, setSubject] = useState(DEFAULT_SUBJECT)
   const [bodyHtml, setBodyHtml] = useState(DEFAULT_BODY)
+  const [lineSpacing, setLineSpacing] = useState(1.5)
   const [mailConfig, setMailConfig] = useState({ email: '', appPassword: '' })
   const [busy, setBusy] = useState(false)
   const [sending, setSending] = useState(false)
@@ -61,18 +76,29 @@ function App() {
   const [error, setError] = useState('')
   const [result, setResult] = useState(null)
   const [dragging, setDragging] = useState(false)
-  const valid = records.filter((record) => record.valid && !record.duplicate)
+  const manualRecords = typedEmails.split(/[\s,;]+/).map((email) => email.trim()).filter(Boolean).map((email, index) => ({ recipient: email, valid: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email), values: { ...(manualDataInfo.records[index]?.values || {}), [recipientAlias || recipientField || 'Email']: email } }))
+  const designerFields = [...new Set([...fields, ...manualDataInfo.fields])]
+  const seenRecipients = new Set()
+  const allRecords = [...records, ...manualRecords].map((record) => {
+    const key = record.recipient?.toLowerCase()
+    const duplicate = Boolean(record.valid && key && seenRecipients.has(key)) || Boolean(record.duplicate)
+    if (record.valid && key) seenRecipients.add(key)
+    return { ...record, duplicate }
+  })
+  const valid = allRecords.filter((record) => record.valid && !record.duplicate)
 
   async function refreshPreview(primary = primaryFile, extras = dataFiles, selectedRecipient = recipientField, selectedJoins = joins, noHeader = headerlessPrimary, firstName = firstColumnName, selectedAlias = recipientAlias) {
     if (!primary) return
+    const run = ++previewRunRef.current
     setBusy(true); setError(''); setResult(null)
     try {
       const data = await buildRecipientData({ primaryFile: primary, dataFiles: extras, recipientField: selectedRecipient, recipientAlias: selectedAlias, headerlessPrimary: noHeader, firstColumnName: firstName, joins: selectedJoins })
+      if (run !== previewRunRef.current) return
       setFields(data.fields); setPrimaryFields(data.primaryFields); setRecords(data.records)
       setRecipientField(data.recipientField); setRecipientAlias(data.recipientAlias); setSources(data.sources)
       setJoins(Object.fromEntries(data.sources.map((source) => [source.id, { primaryField: source.primaryField, sourceField: source.sourceField, mode: source.mode }])))
-    } catch (exception) { setError(exception.message || 'Could not read these files.') }
-    finally { setBusy(false) }
+    } catch (exception) { if (run === previewRunRef.current) setError(exception.message || 'Could not read these files.') }
+    finally { if (run === previewRunRef.current) setBusy(false) }
   }
 
   function selectPrimary(file) {
@@ -90,6 +116,24 @@ function App() {
     const nextFiles = [...dataFiles, ...added]
     const nextJoins = { ...joins }
     setDataFiles(nextFiles); setJoins(nextJoins)
+    if (primaryFile) refreshPreview(primaryFile, nextFiles, recipientField, nextJoins)
+  }
+
+  function updateManualData(text) {
+    const contents = text.trim()
+    const run = ++manualDataRunRef.current
+    const nextFiles = dataFiles.filter((item) => item.id !== 'manual-data')
+    const manualFile = contents ? new File([contents], 'manual-data.csv', { type: 'text/csv' }) : null
+    if (manualFile) nextFiles.push({ id: 'manual-data', file: manualFile })
+    const nextJoins = { ...joins }
+    if (!contents) delete nextJoins['manual-data']
+    setDataFiles(nextFiles); setJoins(nextJoins)
+    if (!manualFile) setManualDataInfo({ fields: [], records: [] })
+    else readDataFile(manualFile).then((data) => {
+      if (run === manualDataRunRef.current) setManualDataInfo(data)
+    }).catch(() => {
+      if (run === manualDataRunRef.current) setManualDataInfo({ fields: [], records: [] })
+    })
     if (primaryFile) refreshPreview(primaryFile, nextFiles, recipientField, nextJoins)
   }
 
@@ -141,7 +185,7 @@ function App() {
       const files = valid.map((record, index) => {
         const renderedSubject = renderTemplate(subject, record.values, false).replace(/[\r\n]+/g, ' ').trim() || 'Personalized email'
         const renderedBody = renderTemplate(bodyHtml, record.values)
-        return { name: `${String(index + 1).padStart(4, '0')}_${safeFilePart(record.recipient)}.eml`, content: makeEml(record.recipient, renderedSubject, renderedBody) }
+        return { name: `${String(index + 1).padStart(4, '0')}_${safeFilePart(record.recipient)}.eml`, content: makeEml(record.recipient, renderedSubject, renderedBody, lineSpacing) }
       })
       downloadBlob(createZip(files), 'personalized-email-drafts.zip')
       setResult({ count: files.length })
@@ -159,7 +203,7 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           subject,
-          bodyHtml,
+          bodyHtml: `<div style="font:13px/${lineSpacing} Arial,sans-serif;color:#384137"><style>p{margin:0 0 5px}p:last-child{margin-bottom:0}ul,ol{margin:5px 0;padding-left:24px}</style>${bodyHtml}</div>`,
           mailConfig,
           recipients: valid.map((record) => ({ email: record.recipient, values: record.values })),
         }),
@@ -209,18 +253,28 @@ function App() {
   }
 
   const unconfiguredJoins = sources.some((source) => source.mode === 'choose' || (source.mode === 'key' && (!source.primaryField || !source.sourceField)))
-  return <main className="shell">
-    <header className="topbar"><a className="brand" href="#top"><span className="brand-mark">✳</span><span>dispatch<span className="brand-dot">.</span></span></a><span className="top-note"><i /> PRIVATE SENDER</span></header>
-    <section className="intro" id="top"><h1>Your message.<br/><em>Every detail.</em></h1></section>
+  return <div className="email-sender"><main className="shell">
+    <header className="topbar">
+      <a className="brand" href="#top" aria-label="Bulk email sender home">
+        <span className="brand-mark" aria-hidden="true">M</span>
+        <span>Bulk email <span className="brand-dot">sender</span></span>
+      </a>
+      <div className="top-note"><i aria-hidden="true" />Local mail merge</div>
+    </header>
     <section className="workspace"><div className="workflow">
-      <FileImport primaryInputRef={primaryInputRef} dataInputRef={dataInputRef} primaryFile={primaryFile} dataFiles={dataFiles} busy={busy} rowCount={records.length} dragging={dragging} setDragging={setDragging} onPrimaryFile={selectPrimary} onDataFiles={addDataFiles} onRemoveDataFile={removeDataFile}/>
-      <RecipientTable primaryFields={primaryFields} records={records} recipientField={recipientField} onRecipientField={changeRecipientField} recipientAlias={recipientAlias} onRecipientAlias={changeRecipientAlias} headerlessPrimary={headerlessPrimary} firstColumnName={firstColumnName} onHeaderModeChange={changePrimaryHeaderMode} onFirstColumnName={changeFirstColumnName} sources={sources} busy={busy} onJoinChange={changeJoin}/>
-      <EmailDesigner fields={fields} records={records} subject={subject} setSubject={setSubject} bodyHtml={bodyHtml} setBodyHtml={setBodyHtml}/>
-      {(error || result) && <div className={`notice ${error ? 'notice-error' : 'notice-success'}`}>{error || (result.type === 'sent' ? `Sent ${result.count} email${result.count === 1 ? '' : 's'}${result.failures.length ? ` · ${result.failures.length} failed` : ''}.` : `Prepared ${result.count} personalized email drafts in a ZIP file. Open the .eml files with your mail app to review and send.`)}{result?.failures?.length > 0 && <details><summary>Show failed recipients</summary>{result.failures.map((failure) => <div key={failure.email}>{failure.email}: {failure.error}</div>)}</details>}</div>}
-    </div><SendPanel count={valid.length} total={records.length} subject={subject} mailConfig={mailConfig} setMailConfig={setMailConfig} sending={sending} disabled={!primaryFile || !valid.length || busy || unconfiguredJoins || !subject.trim() || !bodyHtml.trim()} onSend={sendEmails} onExport={exportEmails}/></section>
-    <footer><span>DISPATCH / LOCAL MAIL MERGE</span><span>GMAIL SEND VIA VITE NODE SERVICE</span></footer>
+      <FileImport primaryInputRef={primaryInputRef} dataInputRef={dataInputRef} primaryFile={primaryFile} dataFiles={dataFiles} busy={busy} rowCount={records.length} dragging={dragging} setDragging={setDragging} onPrimaryFile={selectPrimary} onDataFiles={addDataFiles} onManualDataChange={updateManualData} onRemoveDataFile={removeDataFile}/>
+      <section className="typed-recipients"><label htmlFor="typed-emails">ADD EMAIL ADDRESSES</label><textarea id="typed-emails" value={typedEmails} onChange={(event) => setTypedEmails(event.target.value)} placeholder="Type or paste addresses, separated by commas or new lines" rows={3}/><small>Typed addresses are combined with your uploaded recipient list.</small></section>
+      <RecipientTable primaryFields={primaryFields} records={allRecords} recipientField={recipientField} onRecipientField={changeRecipientField} recipientAlias={recipientAlias} onRecipientAlias={changeRecipientAlias} headerlessPrimary={headerlessPrimary} firstColumnName={firstColumnName} onHeaderModeChange={changePrimaryHeaderMode} onFirstColumnName={changeFirstColumnName} sources={sources} busy={busy} onJoinChange={changeJoin}/>
+      </div>
+      <div className="designer-workflow">
+      <EmailDesigner fields={designerFields} records={[...records, ...manualRecords]} subject={subject} setSubject={setSubject} bodyHtml={bodyHtml} setBodyHtml={setBodyHtml} lineSpacing={lineSpacing} setLineSpacing={setLineSpacing}/>
+      </div>
+      {(error || result) && <div className={`notice workspace-notice ${error ? 'notice-error' : 'notice-success'}`}>{error || (result.type === 'sent' ? `Sent ${result.count} email${result.count === 1 ? '' : 's'}${result.failures.length ? ` Â· ${result.failures.length} failed` : ''}.` : `Prepared ${result.count} personalized email drafts in a ZIP file. Open the .eml files with your mail app to review and send.`)}{result?.failures?.length > 0 && <details><summary>Show failed recipients</summary>{result.failures.map((failure) => <div key={failure.email}>{failure.email}: {failure.error}</div>)}</details>}</div>}
+      <div className="send-workflow"><SendPanel count={valid.length} total={allRecords.length} subject={subject} mailConfig={mailConfig} setMailConfig={setMailConfig} sending={sending} disabled={!valid.length || busy || (primaryFile && unconfiguredJoins) || !subject.trim() || !bodyHtml.trim()} onSend={sendEmails} onExport={exportEmails}/></div>
+    </section>
+    <footer><span>BULK EMAIL SENDER</span><span>GMAIL DELIVERY / LOCAL DRAFT EXPORT</span></footer>
     {sendProgress?.open && <SendingModal progress={sendProgress} onClose={() => setSendProgress(null)}/>}
-  </main>
+  </main></div>
 }
 
 export default App
