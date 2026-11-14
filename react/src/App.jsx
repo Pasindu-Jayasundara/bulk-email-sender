@@ -254,12 +254,12 @@ function App() {
 
   const unconfiguredJoins = sources.some((source) => source.mode === 'choose' || (source.mode === 'key' && (!source.primaryField || !source.sourceField)))
   return <div className="email-sender"><main className="shell">
-    <header className="topbar">
-      <a className="brand" href="#top" aria-label="Bulk email sender home">
-        <span className="brand-mark" aria-hidden="true">M</span>
-        <span>Bulk email <span className="brand-dot">sender</span></span>
+    <header className="product-header">
+      <a className="product-brand" href="#top" aria-label="Bulk Email Sender home">
+        <img className="product-brand-logo" src="/bulk-email-sender.svg" alt=""/>
+        <span><strong>BULK EMAIL SENDER</strong><small>BY KRYVAZENT</small></span>
       </a>
-      <div className="top-note"><i aria-hidden="true" />Local mail merge</div>
+      <a className="product-header-link" href="https://www.kryvazent.com/" target="_blank" rel="noopener noreferrer">More from Kryvazent <span aria-hidden="true">&#8599;</span></a>
     </header>
     <section className="workspace"><div className="workflow">
       <FileImport primaryInputRef={primaryInputRef} dataInputRef={dataInputRef} primaryFile={primaryFile} dataFiles={dataFiles} busy={busy} rowCount={records.length} dragging={dragging} setDragging={setDragging} onPrimaryFile={selectPrimary} onDataFiles={addDataFiles} onManualDataChange={updateManualData} onRemoveDataFile={removeDataFile}/>
@@ -272,7 +272,7 @@ function App() {
       {(error || result) && <div className={`notice workspace-notice ${error ? 'notice-error' : 'notice-success'}`}>{error || (result.type === 'sent' ? `Sent ${result.count} email${result.count === 1 ? '' : 's'}${result.failures.length ? ` Â· ${result.failures.length} failed` : ''}.` : `Prepared ${result.count} personalized email drafts in a ZIP file. Open the .eml files with your mail app to review and send.`)}{result?.failures?.length > 0 && <details><summary>Show failed recipients</summary>{result.failures.map((failure) => <div key={failure.email}>{failure.email}: {failure.error}</div>)}</details>}</div>}
       <div className="send-workflow"><SendPanel count={valid.length} total={allRecords.length} subject={subject} mailConfig={mailConfig} setMailConfig={setMailConfig} sending={sending} disabled={!valid.length || busy || (primaryFile && unconfiguredJoins) || !subject.trim() || !bodyHtml.trim()} onSend={sendEmails} onExport={exportEmails}/></div>
     </section>
-    <footer><span>BULK EMAIL SENDER</span><span>GMAIL DELIVERY / LOCAL DRAFT EXPORT</span></footer>
+    <footer className="product-footer"><a className="footer-brand" href="https://www.kryvazent.com/" target="_blank" rel="noopener noreferrer"><img src="/kryvazent-logo.png" alt=""/><span><strong>KRYVAZENT</strong><small>SOFTWARE ENGINEERING</small></span></a><div className="footer-product-info"><strong>BULK EMAIL SENDER</strong><span>Prepare personalized email campaigns.</span></div><a className="footer-visit" href="https://www.kryvazent.com/" target="_blank" rel="noopener noreferrer">Visit Kryvazent <span aria-hidden="true">&#8599;</span></a></footer>
     {sendProgress?.open && <SendingModal progress={sendProgress} onClose={() => setSendProgress(null)}/>}
   </main></div>
 }
