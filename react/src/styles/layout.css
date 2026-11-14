@@ -1,4 +1,4 @@
-.email-sender .shell{width:100%;max-width:1720px;padding-left:12px;padding-right:12px}
+﻿.email-sender .shell{width:100%;max-width:1720px;padding-left:12px;padding-right:12px}
 .email-sender .topbar{margin-bottom:46px}
 .email-sender .workspace{grid-template-columns:minmax(0,1.25fr) minmax(0,1.4fr) 340px;gap:26px;align-items:start}
 .email-sender .workflow,.email-sender .designer-workflow,.email-sender .send-workflow{min-width:0}
