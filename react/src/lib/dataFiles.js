@@ -69,21 +69,23 @@ export async function buildRecipientData({ primaryFile, dataFiles, recipientFiel
   const records = primary.records.map((record) => ({ ...record, values: { ...record.values } }))
   const sources = []
   const usedFields = new Set(primaryFields)
+  const detectedRecipientField = recipientField || (headerlessPrimary ? primary.fields[0] : primaryFields.find((field) => ['email', 'emailaddress', 'recipient'].includes(field.toLowerCase().replaceAll(' ', '')))) || ''
 
   for (const sourceFile of dataFiles) {
     const sourceData = await readDataFile(sourceFile.file)
     const sourceName = sourceFile.file.name.replace(/\.[^.]+$/, '')
     const config = joins[sourceFile.id] || {}
+    const common = sourceData.fields.filter((field) => primaryFields.includes(field))
     let mode = config.mode
-    let primaryKey = config.primaryField || ''
+    let primaryKey = config.primaryField || (common.length === 1 ? common[0] : primaryFields.includes(detectedRecipientField) ? detectedRecipientField : '')
     let sourceKey = config.sourceField || ''
     if (!mode) {
-      const common = sourceData.fields.filter((field) => primaryFields.includes(field))
-      mode = common.length === 1 ? 'key' : common.length > 1 ? 'choose' : 'row'
+      mode = common.length === 1 ? 'key' : common.length > 1 ? 'choose' : 'key'
       if (common.length === 1) primaryKey = sourceKey = common[0]
     }
-    if (mode === 'key' && (!primaryFields.includes(primaryKey) || !sourceData.fields.includes(sourceKey))) {
-      primaryKey = ''; sourceKey = ''
+    if (mode === 'key') {
+      if (!primaryFields.includes(primaryKey)) primaryKey = common.length === 1 ? common[0] : ''
+      if (!sourceData.fields.includes(sourceKey)) sourceKey = common.length === 1 ? common[0] : ''
     }
     const aliases = {}
     for (const field of sourceData.fields) {
@@ -117,11 +119,11 @@ export async function buildRecipientData({ primaryFile, dataFiles, recipientFiel
     sources.push({ id: sourceFile.id, name: sourceName, fields: sourceData.fields, aliases, primaryField: primaryKey, sourceField: sourceKey, mode, matched, rowCount: sourceData.records.length })
   }
 
-  const emailField = recipientField || (headerlessPrimary ? primary.fields[0] : primaryFields.find((field) => ['email', 'emailaddress', 'recipient'].includes(field.toLowerCase().replaceAll(' ', '')))) || ''
-  if (!emailField || !primaryFields.includes(emailField)) throw new Error('Choose the recipient email column.')
-  const alias = (recipientAlias || emailField).trim()
-  if (!alias) throw new Error('Enter a name for the email field.')
-  if (alias !== emailField) {
+  const emailField = detectedRecipientField
+  const selectedEmailField = primaryFields.includes(emailField) ? emailField : ''
+  const alias = (recipientAlias || selectedEmailField).trim()
+  if (selectedEmailField && !alias) throw new Error('Enter a name for the email field.')
+  if (selectedEmailField && alias !== selectedEmailField) {
     if (usedFields.has(alias)) throw new Error(`The field name “${alias}” is already in use.`)
     for (const record of records) record.values[alias] = record.values[emailField] || ''
     primaryFields.push(alias)
@@ -129,12 +131,12 @@ export async function buildRecipientData({ primaryFile, dataFiles, recipientFiel
 
   const seen = new Set()
   for (const record of records) {
-    const email = String(record.values[emailField] || '').trim()
+    const email = selectedEmailField ? String(record.values[selectedEmailField] || '').trim() : ''
     const normalized = email.toLowerCase()
     record.recipient = email
     record.valid = validEmail(email)
     record.duplicate = Boolean(email && seen.has(normalized))
     if (email) seen.add(normalized)
   }
-  return { fields: [...primaryFields, ...sources.flatMap((source) => Object.values(source.aliases))], primaryFields, records, recipientField: emailField, recipientAlias: alias, sources }
+  return { fields: [...primaryFields, ...sources.flatMap((source) => Object.values(source.aliases))], primaryFields, records, recipientField: selectedEmailField, recipientAlias: alias, sources }
 }

@@ -1,7 +1,6 @@
 ﻿import { useRef, useState } from 'react'
 import EmailDesigner from './components/EmailDesigner.jsx'
 import FileImport from './components/FileImport.jsx'
-import RecipientTable from './components/RecipientTable.jsx'
 import SendPanel from './components/SendPanel.jsx'
 import SendingModal from './components/SendingModal.jsx'
 import { buildRecipientData, readDataFile } from './lib/dataFiles.js'
@@ -148,7 +147,9 @@ function App() {
     setRecipientField(field)
     const alias = !recipientAlias || recipientAlias === recipientField ? field : recipientAlias
     setRecipientAlias(alias)
-    refreshPreview(primaryFile, dataFiles, field, joins, headerlessPrimary, firstColumnName, alias)
+    const nextJoins = Object.fromEntries(sources.map((source) => [source.id, { ...joins[source.id], primaryField: field }]))
+    setJoins(nextJoins)
+    refreshPreview(primaryFile, dataFiles, field, nextJoins, headerlessPrimary, firstColumnName, alias)
   }
 
   function changeRecipientAlias(alias) {
@@ -174,6 +175,7 @@ function App() {
 
   function changeJoin(id, key, value) {
     const nextJoins = { ...joins, [id]: { ...joins[id], [key]: value } }
+    if ((key === 'sourceField' || key === 'primaryField') && value) nextJoins[id].mode = 'key'
     setJoins(nextJoins)
     refreshPreview(primaryFile, dataFiles, recipientField, nextJoins)
   }
@@ -262,9 +264,7 @@ function App() {
       <a className="product-header-link" href="https://www.kryvazent.com/" target="_blank" rel="noopener noreferrer">More from Kryvazent <span aria-hidden="true">&#8599;</span></a>
     </header>
     <section className="workspace"><div className="workflow">
-      <FileImport primaryInputRef={primaryInputRef} dataInputRef={dataInputRef} primaryFile={primaryFile} dataFiles={dataFiles} busy={busy} rowCount={records.length} dragging={dragging} setDragging={setDragging} onPrimaryFile={selectPrimary} onDataFiles={addDataFiles} onManualDataChange={updateManualData} onRemoveDataFile={removeDataFile}/>
-      <section className="typed-recipients"><label htmlFor="typed-emails">ADD EMAIL ADDRESSES</label><textarea id="typed-emails" value={typedEmails} onChange={(event) => setTypedEmails(event.target.value)} placeholder="Type or paste addresses, separated by commas or new lines" rows={3}/><small>Typed addresses are combined with your uploaded recipient list.</small></section>
-      <RecipientTable primaryFields={primaryFields} records={allRecords} recipientField={recipientField} onRecipientField={changeRecipientField} recipientAlias={recipientAlias} onRecipientAlias={changeRecipientAlias} headerlessPrimary={headerlessPrimary} firstColumnName={firstColumnName} onHeaderModeChange={changePrimaryHeaderMode} onFirstColumnName={changeFirstColumnName} sources={sources} busy={busy} onJoinChange={changeJoin}/>
+      <FileImport primaryInputRef={primaryInputRef} dataInputRef={dataInputRef} primaryFile={primaryFile} dataFiles={dataFiles} primaryFields={primaryFields} sources={sources} typedEmails={typedEmails} onTypedEmailsChange={setTypedEmails} busy={busy} rowCount={records.length} dragging={dragging} setDragging={setDragging} onPrimaryFile={selectPrimary} onDataFiles={addDataFiles} onManualDataChange={updateManualData} onRemoveDataFile={removeDataFile} onJoinChange={changeJoin} recipientProps={{ primaryFields, records: allRecords, recipientField, onRecipientField: changeRecipientField, recipientAlias, onRecipientAlias: changeRecipientAlias, headerlessPrimary, firstColumnName, onHeaderModeChange: changePrimaryHeaderMode, onFirstColumnName: changeFirstColumnName }}/>
       </div>
       <div className="designer-workflow">
       <EmailDesigner fields={designerFields} records={[...records, ...manualRecords]} subject={subject} setSubject={setSubject} bodyHtml={bodyHtml} setBodyHtml={setBodyHtml} lineSpacing={lineSpacing} setLineSpacing={setLineSpacing}/>
